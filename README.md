@@ -2,6 +2,35 @@
 
 在Windows桌面客户端中显示单轮token、会话统计、缓存命中、上下文占用和账号剩余额度。个人维护的非官方工具，与OpenAI无隶属关系；通过本机CDP加载界面，不修改安装包、签名或登录配置。
 
+## 效果预览
+
+以下是按当前源码中的布局和字段绘制的**效果示意图，并非真实客户端截图**。会话、账号头像、模型名称及所有统计数值均为演示数据，不包含个人聊天或真实账号信息；实际外观随客户端版本、缩放和主题有所不同。
+
+整体界面：回复旁显示本轮用量，输入框下方显示三个统计模块，左下角显示可开关的账号额度卡，标题栏提供工作区入口。
+
+![整体效果示意：本轮用量、会话统计、额度卡和工作区入口](docs/images/overview.png)
+
+<details>
+<summary>展开查看四种统计详情</summary>
+
+点击回复后的「用量 … tok」，查看本轮模型、缓存输入和输出明细。
+
+![单轮用量详情示意](docs/images/reply-detail.png)
+
+点击「轮次 · 输出速度」，查看模型活动用时、工具累计耗时、平均TTFT与TPS。
+
+![会话统计详情示意](docs/images/performance-detail.png)
+
+点击「总计 · 缓存命中」，查看累计未缓存输入、缓存读取与输出。
+
+![累计Token与缓存详情示意](docs/images/tokens-detail.png)
+
+点击上下文圆环或百分比，查看估算已用量、上限、剩余量及更新时间。
+
+![上下文用量详情示意](docs/images/context-detail.png)
+
+</details>
+
 ## 快速开始
 
 需要Windows、PowerShell 7、Node.js 22+、Python 3.10+，以及已安装并登录的Microsoft Store `OpenAI.Codex`客户端（界面名称可能显示为ChatGPT）。没有npm/pip第三方依赖。
