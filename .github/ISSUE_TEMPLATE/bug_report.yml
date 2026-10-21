@@ -1,0 +1,30 @@
+name: 故障报告
+description: 更新后失效、显示或统计问题
+body:
+  - type: markdown
+    attributes:
+      value: 请勿上传原始会话、登录配置或整个运行目录；日志片段请先去掉私有信息。
+  - type: input
+    id: client_version
+    attributes:
+      label: 客户端版本
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Windows、PowerShell、Node、Python版本
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 现象与复现步骤
+      description: 哪个区域失效？是否刚更新？是否从统计入口启动？
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 去掉私有信息的错误片段
+      description: 请附日志时间，不要粘贴凭据、完整路径或聊天正文。

@@ -1,0 +1,30 @@
+name: Checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Generate UI and check sources
+        shell: pwsh
+        run: |
+          ./app/build-ui.ps1
+          ./app/check-local.ps1
+      - name: Build and test optional shortcuts
+        shell: pwsh
+        run: |
+          ./scripts/build-launcher.ps1
+          ./launcher/test-shortcuts.ps1
+          ./app/test-startup-helpers.ps1
+      - name: Check public source files
+        run: |
+          node --test scripts/test-public.mjs
+          node scripts/check-public.mjs

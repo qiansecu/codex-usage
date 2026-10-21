@@ -1,0 +1,28 @@
+# Personal settings, sessions, debug endpoints, logs and shortcut recovery records.
+**/runtime*/
+**/profile/
+**/codex-home/
+**/state/
+**/test-fixtures/
+**/__pycache__/
+*.pyc
+*.log
+*.log.*
+*.jsonl
+*.lnk
+*.sqlite*
+*.db
+.env
+.env.*
+!.env.example
+*.local.json
+node_modules/
+dist/
+# Built from tracked sources; do not commit machine-built executables.
+launcher/ChatGPT-Usage.exe
+app/footer-page.js
+app/footer-page.js.tmp
+checks.json
+shortcut-checks.json
+.DS_Store
+Thumbs.db
