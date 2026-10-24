@@ -35,6 +35,34 @@ Assert-InstalledCheck (Test-SameInstalledProcess $taskJsonRoundTrip @{pid=100;ex
 Assert-InstalledCheck (Test-SameInstalledProcess $taskJsonRoundTrip @{pid=100;executable=$taskAllowedPaths[0];startTimeUtc='2026-10-14T18:02:22.2759348Z'}) $false 'one tick difference is rejected without time tolerance'
 Assert-InstalledCheck (Test-SameInstalledProcess $taskJsonRoundTrip @{pid=100;executable=$taskAllowedPaths[0];startTimeUtc='invalid'}) $false 'malformed creation time rejected'
 Assert-InstalledCheck (Test-SameInstalledProcess $taskJsonRoundTrip @{pid=100;executable=$taskAllowedPaths[0];startTimeUtc=[DateTime]::SpecifyKind([DateTime]::Parse('2026-10-14T18:02:22.2759347'),[DateTimeKind]::Unspecified)}) $false 'ambiguous creation time without timezone rejected'
+$taskSyntheticStart = [DateTime]::Parse('2026-10-14T18:02:22.2759347Z').ToUniversalTime()
+$taskReadState = @{reads=0;pauses=0}
+$taskRead = {param($processId) $taskReadState.reads++;[pscustomobject]@{Id=$processId;Path=$(if($taskReadState.reads -gt 1){$taskAllowedPaths[0]}else{$null});StartTime=$taskSyntheticStart}}.GetNewClosure()
+$taskPause = {$taskReadState.pauses++}.GetNewClosure()
+$taskRecovered = Get-InstalledProcessIdentity -ProcessId 100 -ReadProcess $taskRead -Pause $taskPause
+Assert-InstalledCheck ($taskRecovered.executable -eq $taskAllowedPaths[0] -and $taskReadState.reads -eq 2 -and $taskReadState.pauses -eq 1) $true 'initially empty executable is retried before recording identity'
+$taskNullRead = {param($processId) [pscustomobject]@{Id=$processId;Path=$null;StartTime=$taskSyntheticStart}}.GetNewClosure()
+$taskBlocked = $false
+try {Get-InstalledProcessIdentity -ProcessId 100 -ReadProcess $taskNullRead -Pause {} | Out-Null} catch {$taskBlocked=$true}
+Assert-InstalledCheck $taskBlocked $true 'persistently unreadable executable never produces an incomplete identity record'
+$taskReadState.reads=0
+$taskReusedRead = {param($processId) $taskReadState.reads++;[pscustomobject]@{Id=$processId;Path=$null;StartTime=$taskSyntheticStart.AddTicks($taskReadState.reads)}}.GetNewClosure()
+$taskBlocked=$false
+try {Get-InstalledProcessIdentity -ProcessId 100 -ReadProcess $taskReusedRead -Pause {} | Out-Null} catch {$taskBlocked=$true}
+Assert-InstalledCheck $taskBlocked $true 'PID replacement during an executable retry is rejected'
+Assert-InstalledCheck ($null -eq (Get-InstalledProcessIdentity -ProcessId 100 -ReadProcess {param($processId) return $null} -Pause {})) $true 'already exited process returns absent instead of an invalid identity'
+$taskPartial = @{pid=100;executable=$null;startTimeUtc=$taskExactIso}
+$taskRecovered = Resolve-RecordedInjectorIdentity -Saved $taskPartial -Current $taskExact -ExpectedExecutable $taskAllowedPaths[0]
+Assert-InstalledCheck (Test-SameInstalledProcess $taskRecovered $taskExact) $true 'legacy missing executable recovers only with selected runtime and exact PID and timestamp'
+$taskBlocked=$false
+try {Resolve-RecordedInjectorIdentity $taskPartial @{pid=100;executable=$taskAllowedPaths[0];startTimeUtc='2026-10-14T18:02:22.2759348Z'} $taskAllowedPaths[0] | Out-Null} catch {$taskBlocked=$true}
+Assert-InstalledCheck $taskBlocked $true 'legacy recovery rejects even one changed creation-time tick'
+$taskBlocked=$false
+try {Resolve-RecordedInjectorIdentity $taskPartial $taskExact 'C:\other\node.exe' | Out-Null} catch {$taskBlocked=$true}
+Assert-InstalledCheck $taskBlocked $true 'legacy recovery cannot substitute another runtime executable'
+$taskBlocked=$false
+try {Resolve-RecordedInjectorIdentity @{pid=100;executable='C:\other\node.exe';startTimeUtc=$taskExactIso} $taskExact $taskAllowedPaths[0] | Out-Null} catch {$taskBlocked=$true}
+Assert-InstalledCheck $taskBlocked $true 'explicit executable mismatch is never repaired as a missing path'
 $taskResult = [ordered]@{checkedAt=[DateTimeOffset]::UtcNow.ToString('o');passed=$taskChecks.Count;failed=0;checks=$taskChecks;desktopLaunch='not invoked'}
 $taskRuntime = Join-Path $PSScriptRoot 'runtime-installed'
 New-Item -ItemType Directory -Path $taskRuntime -Force | Out-Null

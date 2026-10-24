@@ -23,6 +23,12 @@
 
 `app/injector.mjs`先使用本机HTTP发现页面，再用本机WebSocket连接。`validTarget()`限制应用页面与本次端口，`selectTarget()`复用同次启动已确认的页面ID；多候选不能任取第一个。若新版完全不支持调试参数，需要重新评估方案，不能通过开放网卡监听或放松进程核验解决。
 
+## 安装完成后启动或重启
+
+首次start.cmd和默认scripts/setup.ps1会显示确认，默认选稍后。取消或关闭弹窗后没有出现统计是预期结果，可稍后重试；只做文件准备使用scripts/setup.ps1 -PrepareOnly，自动检查不得调用默认交互安装。此前已有成功启动设置时，日常start.cmd不会反复询问安装重启。
+
+确认后如果提示进程、入口文件或注册包已变化，先核对是否同时打开/更新了客户端，再重试安装。仍有客户端窗口或保存提示时请手动处理；安装器不会强制关闭该窗口。后台未退出或身份无法核验时不会直接再启动新实例。提示“launcher started”不等于注入已成功，继续核对本次runtime-installed/status.json时间和状态。
+
 ## 会话和单轮定位
 
 `app/footer-controller.js`的 `composers()`、`identity()`、`turnCandidates()`、`scan()` 当前依赖：
@@ -142,3 +148,37 @@ UI源码修改后运行 `app/build-ui.cmd`，已连接的注入器自动加载�
 当前launcher/shortcut-native.cs直接使用[IShellLinkW](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nn-shobjidl_core-ishelllinkw)及[IPersistFile.Save](https://learn.microsoft.com/en-us/windows/win32/api/objidl/nf-objidl-ipersistfile-save)创建Unicode快捷方式。shortcut-helpers.psm1提供Read-UsageShortcut/Write-UsageShortcut，正式安装、目标校验与合成测试均使用它。读取时不解析或启动快捷方式目标，原有哈希备份、幂等和用户改动保护继续保留。
 
 若旧版出现Unable to save shortcut且路径文字变为问号，更新整个项目源码，包括这两个辅助文件。仅修改控制台编码不能修复此COM接口的字符转换。运行scripts/build-launcher.ps1、launcher/test-shortcuts.ps1和app/test-startup-helpers.ps1，检查中文及其他字符的文件名、目标、参数、工作目录和图标路径是否完整往返；测试仅使用隔离目录。云端是否已修复仍以对应提交的Actions结果为准。
+
+## 安装确认后失败，但未进入统计启动器
+
+检查app/runtime-installed/install-error.json：preflight代表安装前核验失败，confirmation-and-restart代表确认或退出/交接阶段失败；此文件记录错误时间与源码位置。进入统计启动器后的错误另见launch-error.json。旧版setup没有保存前一阶段的具体异常，单凭“Installation did not complete”不能判断重启失败原因，应保留终端错误。不要因此关闭进程身份检查或强制结束仍打开的窗口。
+
+26.1021.3705.0的只读安装包核对发现app-shared资源更新为955d52676f9c、原生服务导出Qot、gauge初始化/资产Ux/Hx，已增加保留旧版回退的映射并通过合成检查。此处仅为静态核对，真实注入、侧栏DOM及用户点击尚待验证。
+
+### 确认重启后提示 Cannot verify a client process
+
+26.1021本机测试在confirmation-and-restart阶段发现进程快照的Path为空。旧代码没有区分已退出的Electron子进程与仍运行但身份不可读的进程。现先核对HasExited，或重新按PID读取身份；已退出才跳过，仍运行却身份不可读则停止并在错误中注明PID。新读取到的身份仍需通过注册包路径核验，任何同名外部程序都不会被选择。已补5项合成回归；真实重启结果需再次确认，不能仅凭此错误认定新版不支持注入。
+
+
+## 长会话单轮用量缺失，其他会话正常
+
+26.1021本机验证发现同一会话迁移到paginated历史后，旧rollout-…-会话ID.jsonl停止增长，后续记录写入rollout-…-会话ID_分段ID.jsonl。仅按旧文件名读取会导致新轮次unmatched-turn，底部累计也可能停留在旧记录。
+
+当前读取器支持一个旧文件加一个同会话续段：核对session_meta.id、history_mode和history_base.thread_id，严格按end_byte_offset及end_ordinal_exclusive衔接；序号包含旧文件继承历史的起始序号。不会读取声明边界后的旧分支，也不会把缓存或累计再次相加。多个续段、身份不符、边界不完整时停止匹配；不能任选最新文件。更多分段链尚未适配。修复后重载统计后台即可，无需重启客户端。
+
+排查只看记录类型、轮次ID、更新时间及核算结果，不分享聊天内容或完整会话文件。SQLite仅用于本次只读定位，正式读取器不依赖或修改数据库。
+
+## 重载提示 Statistics process identity changed
+
+先比较injector-session.json中保存的identity，不能只凭错误文字认定PID复用。本机首次安装曾在创建Node后立即读取，保存了executable=null但PID/创建时间存在的不完整记录，后续严格比较必然失败。
+
+现在读取身份会短暂重试空路径，期间创建时间变化则拒绝，持续不可读则报错，不再写入不完整身份。重载兼容这种旧记录时，仍要求当前进程路径等于原来选定且已核验的Node、PID相同、创建时间精确相同；只有缺失路径可恢复，明确的路径冲突或时间不符继续停止。不要手工修改PID、放宽时间容差或取消身份检查。修复只重载统计，不关闭客户端。
+
+
+## 统计已启动，桌面却没有新入口
+
+旧逻辑在开始菜单发现另一个安装目录的同名统计入口时，会在预检阶段取消整组创建，导致原本空闲的桌面也没有入口。现首次安装会保留现有入口，选择桌面和开始菜单都可用的名称：ChatGPT（统计）→Codex Meter→带编号名称。重复安装沿用已记录路径；用户修改保护和恢复备份仍保留。
+
+修复后可运行launcher/set-default.cmd补建，不需要重启客户端。同名旧普通入口不会被替换。若自动工具写入桌面/菜单仍收到系统Access denied，应让用户在正常桌面运行同一入口，不改变ACL或删除系统缓存。
+
+安装确认改用本机WPF控件，不依赖WebView或浏览器。预览可用scripts/install-dialog.psm1的Export-UsageInstallDialogPreview离屏渲染真实控件，预览不会触发确认或进程操作。

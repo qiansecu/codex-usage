@@ -1,6 +1,7 @@
 export function createHeader(options) {
   'use strict';
-  const { window, document, location, loadNative = () => import('/assets/app-shared-bbfeca5e5737.js')
+  const { window, document, location, loadNative = () => import('/assets/app-shared-955d52676f9c.js')
+    .catch(() => import('/assets/app-shared-bbfeca5e5737.js'))
     .catch(() => import('/assets/app-shared-30671c57ec82.js')) } = options;
   const key = '__codexUsageHeaderV1';
   if (window[key]) return window[key].status();
@@ -79,9 +80,9 @@ export function createHeader(options) {
 
   async function nativeService() {
     if (service) return service;
-    // Audited exports: Kat in 26.1013.4894.0, fN in 26.1007.9446.0. A mismatch fails closed.
+    // Audited exports: Qot in 26.1021.3705.0, Kat in 26.1013.4894.0, fN in 26.1007.9446.0. A mismatch fails closed.
     servicePromise ??= (nativeModulePromise ??= loadNative()).then(module => {
-      const api = module.Kat ?? module.fN;
+      const api = module.Qot ?? module.Kat ?? module.fN;
       if (typeof api?.openIn?.open !== 'function' || typeof api?.openIn?.getTargets !== 'function') throw new Error('Native file manager unavailable');
       return api;
     });
@@ -93,10 +94,12 @@ export function createHeader(options) {
     try {
       const module = await (nativeModulePromise ??= loadNative());
       if (disposed) return;
-      // Audited gauge-light-16 asset and initializer in 26.1013.4894.0; never call an unknown version's initializer.
-      if (typeof module.Kat?.openIn?.open !== 'function' || typeof module.oS !== 'function') return;
-      module.oS();
-      const asset = module.aS;
+      // Audited gauge pairs: Ux/Hx in 26.1021.3705.0, oS/aS in 26.1013.4894.0.
+      const modern = typeof module.Qot?.openIn?.open === 'function';
+      const initialize = modern ? module.Ux : module.oS;
+      if ((!modern && typeof module.Kat?.openIn?.open !== 'function') || typeof initialize !== 'function') return;
+      initialize();
+      const asset = modern ? module.Hx : module.aS;
       if (asset?.name !== 'gauge-light-16' || typeof asset.body !== 'string' || asset.canvas?.viewBox !== '0 0 16 16') return;
       const paths = [];
       for (const match of asset.body.matchAll(/<path\b[^>]*>/g)) {

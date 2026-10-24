@@ -62,6 +62,7 @@ class Session:
 
     def reset(self):
         self.offset = 0
+        self.base_loaded = False
         self.identity = None
         self.buffer = b""
         self.metadata = {}
@@ -166,6 +167,31 @@ class Session:
             if self.identity is not None and (identity != self.identity or stat.st_size < self.offset):
                 self.reset()
             self.identity = identity
+            if self.config.get("basePath") and not self.base_loaded:
+                base = Path(self.config["basePath"])
+                end = self.config["baseEnd"]
+                if base.stat().st_size < end:
+                    raise ValueError("History prefix exceeds its source")
+                with base.open("rb") as stream:
+                    prefix = stream.read(end)
+                if not prefix.endswith(b"\n"):
+                    raise ValueError("History prefix boundary does not match")
+                lines = prefix.splitlines()
+                meta = json.loads(lines[0])
+                if meta.get("type") != "session_meta" or meta.get("payload", {}).get("id") != self.config["id"]:
+                    raise ValueError("History prefix identity does not match")
+                inherited_history = meta.get("payload", {}).get("history_base") or {}
+                origin = inherited_history.get("end_ordinal_exclusive", 0) if isinstance(inherited_history, dict) else -1
+                if type(origin) is not int or origin < 0 or origin + len(lines) != self.config["baseOrdinal"]:
+                    raise ValueError("History prefix ordinal does not match")
+                for line in lines:
+                    if not line.strip():
+                        continue
+                    try:
+                        self.accept(json.loads(line))
+                    except (ValueError, TypeError, AttributeError):
+                        self.ignored_lines += 1
+                self.base_loaded = True
             if stat.st_size > self.offset:
                 with self.path.open("rb") as stream:
                     stream.seek(self.offset)

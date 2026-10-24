@@ -19,6 +19,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Installed launcher checks failed.' }
     & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File (Join-Path $PSScriptRoot 'test-runtime-helpers.ps1')
     if ($LASTEXITCODE -ne 0) { throw 'Runtime resolver checks failed.' }
+    & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File (Join-Path $PSScriptRoot '..\scripts\test-install-flow.ps1')
+    if ($LASTEXITCODE -ne 0) { throw 'Installation restart confirmation checks failed.' }
     Write-Host 'All local checks passed. No client was started or closed; default shortcuts were not changed.'
 } finally {
     Pop-Location

@@ -21,11 +21,35 @@ class Backend:
             return {**base, 'sourceState': 'unbound'}
         paths = [p for p in self.root.rglob(f'rollout-*-{thread_id}.jsonl')
                  if p.resolve().is_relative_to(self.root)]
-        if len(paths) != 1:
+        pages = [p for p in self.root.rglob(f'rollout-*-{thread_id}_*.jsonl')
+                 if p.resolve().is_relative_to(self.root)]
+        if len(paths) != 1 or len(pages) > 1:
             return {**base, 'sourceState': 'missing' if not paths else 'ambiguous'}
+        config = {'id': thread_id, 'title': thread_id, 'path': str(paths[0])}
+        if pages:
+            # Audited paginated rollout: one same-thread continuation and an exact byte prefix.
+            # Never select the newest file, infer order from reply positions, or follow a foreign path.
+            try:
+                if not UUID.fullmatch(pages[0].stem.rsplit('_', 1)[-1]):
+                    raise ValueError('Unsupported continuation filename')
+                with pages[0].open('rb') as stream:
+                    meta = json.loads(stream.readline(1024 * 1024))
+                payload = meta.get('payload', {})
+                history = payload.get('history_base', {})
+                if meta.get('type') != 'session_meta' or payload.get('id') != thread_id:
+                    return {**base, 'sourceState': 'identity-mismatch'}
+                if payload.get('history_mode') != 'paginated' or history.get('thread_id') != thread_id:
+                    raise ValueError('Unsupported history base')
+                end = history.get('end_byte_offset')
+                ordinal = history.get('end_ordinal_exclusive')
+                if type(end) is not int or end <= 0 or type(ordinal) is not int or ordinal <= 0:
+                    raise ValueError('Invalid history boundary')
+                config.update(path=str(pages[0]), basePath=str(paths[0]), baseEnd=end, baseOrdinal=ordinal)
+            except (OSError, ValueError, TypeError, AttributeError) as error:
+                return {**base, 'sourceState': 'read-error', 'sourceError': type(error).__name__}
         session = self.sessions.get(thread_id)
-        if session is None or session.path != paths[0]:
-            session = Session({'id': thread_id, 'title': thread_id, 'path': str(paths[0])})
+        if session is None or session.config != config:
+            session = Session(config)
             self.sessions[thread_id] = session
         session.update()
         if session.error:

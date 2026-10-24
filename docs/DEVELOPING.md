@@ -6,7 +6,7 @@
 | --- | --- |
 | `app/` | UI控制器、注入连接、本地读取器、启动/重载/撤销和测试 |
 | `launcher/` | 可选Windows启动器源码、独立快捷方式设置与恢复 |
-| `scripts/` | 启动器编译与公开文件检查 |
+| `scripts/` | 安装交接、WPF确认框、启动器编译与公开文件检查 |
 | `docs/` | 安装、隐私、更新维护与发布说明 |
 | `.github/workflows/` | Windows源码检查流程 |
 
@@ -22,6 +22,7 @@ pwsh -NoProfile -File .\app\check-local.ps1
 pwsh -NoProfile -File .\scripts\build-launcher.ps1
 pwsh -NoProfile -File .\launcher\test-shortcuts.ps1
 pwsh -NoProfile -File .\app\test-startup-helpers.ps1
+pwsh -NoProfile -File .\scripts\test-install-flow.ps1
 node --test .\scripts\test-public.mjs
 node .\scripts\check-public.mjs
 ```
@@ -36,7 +37,9 @@ node .\scripts\check-public.mjs
 
 修改注入器、绑定逻辑或Python后端后，运行 `app/reload-statistics.cmd` 重载统计。修改启动/激活逻辑则需要正常退出客户端后重新启动。失效的旧进程记录不能通过编辑PID来修复。
 
-`scripts/setup.ps1`只编译，不启动客户端；加-Shortcuts才提前设置真实入口。正常start成功后也会自动创建入口。测试/CI只使用TestRoot合成桌面，不运行真实安装启动；startup-helpers验证就绪门槛、本地路径记忆和自动创建流程。
+`scripts/setup.ps1 -PrepareOnly`只准备，不弹窗或重启客户端；默认交互安装完成后要求用户确认才会进入统计启动器。显式加-Shortcuts才提前设置真实入口。首次start.cmd通过scripts/start.ps1进入安装；已有成功启动设置时转入日常启动。正常注入确认后再自动创建独立快捷方式。
+
+scripts/install-helpers.psm1封装注册包/入口预检、本机确认、进程身份快照复核和新启动器交接。test-install-flow使用注入的惰性回调与合成进程对象验证取消、PID复用、新进程、后台未退出、可见保存提示、失败不回退及首次/日常分流；不显示真实弹窗、不关闭客户端。check-local和CI包含该测试。测试/CI只使用合成目录；startup-helpers另验证就绪门槛、本地路径记忆和自动创建。
 
 ## 数据口径
 
@@ -45,3 +48,5 @@ node .\scripts\check-public.mjs
 TPS使用纯文本响应样本的非推理输出除以生成耗时；模型活动取区间并集，工具累计耗时允许包含并行重叠。TTFT取成功完成轮次的有效记录平均。上下文是最近请求用量估算，分类字段不可靠时不展示虚构分类。
 
 新客户端适配须先按 [更新指南](TROUBLESHOOTING.md)核对真实结构，再增加有意义的行为测试。不要仅把断言改成当前输出而不核对语义。
+
+scripts/install-dialog.psm1使用Windows内置WPF，不新增第三方界面依赖。离屏预览渲染与真实确认共用控件；默认回车及Esc均为稍后。当前完整回归共187项，实际验收范围见RELEASE-CHECKS.md。

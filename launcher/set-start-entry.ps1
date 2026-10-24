@@ -29,7 +29,28 @@ if ($Restore) {
     exit 0
 }
 if (-not (Test-Path -LiteralPath $taskLauncher -PathType Leaf)) { throw 'Statistics launcher is missing.' }
-$taskPaths = @((Join-Path $taskDesktop 'ChatGPT（统计）.lnk'), (Join-Path $taskMenu 'ChatGPT（统计）.lnk'))
+if ($taskEntries.Count) {
+    $taskPaths = @($taskEntries.path)
+    if ($taskPaths.Count -ne 2 -or @($taskPaths | Where-Object { [IO.Path]::GetDirectoryName($_) -eq $taskDesktop }).Count -ne 1 -or
+        @($taskPaths | Where-Object { [IO.Path]::GetDirectoryName($_) -eq $taskMenu }).Count -ne 1) { throw 'Unexpected shortcut recovery paths; preserved.' }
+} else {
+    $taskPaths = $null
+    foreach ($taskName in @('ChatGPT（统计）','Codex Meter') + @(2..99 | ForEach-Object { 'Codex Meter (' + $_ + ')' })) {
+        $taskCandidates = @((Join-Path $taskDesktop ($taskName + '.lnk')), (Join-Path $taskMenu ($taskName + '.lnk')))
+        $taskAvailable = $true
+        foreach ($taskCandidate in $taskCandidates) {
+            if (-not (Test-Path -LiteralPath $taskCandidate)) { continue }
+            try {
+                $taskCandidateLink = Read-UsageShortcut -Path $taskCandidate
+                $taskSame = ($taskCandidateLink.TargetPath -eq $taskQuietLauncher -and -not $taskCandidateLink.Arguments) -or
+                    ($taskCandidateLink.TargetPath -eq $taskScriptHost -and $taskCandidateLink.Arguments -eq $taskScriptArguments)
+            } catch { $taskSame = $false }
+            if (-not $taskSame) { $taskAvailable = $false; break }
+        }
+        if ($taskAvailable) { $taskPaths = $taskCandidates; break }
+    }
+    if (-not $taskPaths) { throw 'No unused statistics shortcut name is available; existing entries were preserved.' }
+}
 $taskPending = @()
 foreach ($taskPath in $taskPaths) {
     $taskExisting = @($taskEntries | Where-Object { $_.path -eq $taskPath })
@@ -75,6 +96,6 @@ foreach ($taskEntry in $taskPending) {
     Remove-Item -LiteralPath $taskStaged
 }
 Write-Host '已在桌面和开始菜单添加独立统计入口，原来的普通入口保持不变。'
-Write-Host '请在开始菜单搜索 ChatGPT（统计），右键选择“固定到开始屏幕”。'
+Write-Host ('统计入口名称：' + [IO.Path]::GetFileNameWithoutExtension($taskPaths[0]))
 Write-Host '推荐区中的商店原生入口独立存在，请使用已固定的统计入口。'
 Write-Host '首次启动前请完整退出普通客户端；未添加 Windows 登录自启动。'

@@ -12,9 +12,12 @@ $detailListeners = @(Get-NetTCPConnection -State Listen -LocalPort $detailSessio
 if ($detailListeners.Count -ne 1 -or $detailListeners[0].LocalAddress -ne '127.0.0.1' -or $detailListeners[0].OwningProcess -ne $detailOwner.pid) { throw 'Listener verification failed.' }
 $detailSaved = Get-Content -LiteralPath (Join-Path $detailRuntime 'injector-session.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $detailCurrent = Get-InstalledProcessIdentity -ProcessId $detailSaved.identity.pid
-if ($detailCurrent -and -not (Test-SameInstalledProcess -Saved $detailSaved.identity -Current $detailCurrent)) { throw 'Statistics process identity changed; nothing was stopped.' }
 $detailNode = Resolve-UsageRuntime -Kind Node -ExplicitPath $detailSaved.nodeExecutable
-if (-not $detailSaved.identity.executable.Equals($detailNode,[StringComparison]::OrdinalIgnoreCase)) { throw 'Statistics runtime verification failed.' }
+if ($detailCurrent) {
+    $detailSaved.identity = Resolve-RecordedInjectorIdentity -Saved $detailSaved.identity -Current $detailCurrent -ExpectedExecutable $detailNode
+} elseif ($detailSaved.identity.executable -and -not $detailSaved.identity.executable.Equals($detailNode,[StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Statistics runtime verification failed.'
+}
 & $detailNode (Join-Path $detailRoot 'build-ui.mjs') --check
 if ($LASTEXITCODE -ne 0) { throw 'UI source and generated payload do not match.' }
 $detailStop = Join-Path $detailRuntime 'stop'

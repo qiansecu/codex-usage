@@ -58,6 +58,23 @@ try {
     $usageChangedHash = (Get-FileHash -LiteralPath $usageDesktop).Hash
     Assert-Shortcut ((Run-ShortcutSetup -Undo) -ne 0) 'user-edited shortcut blocks restore'
     Assert-Shortcut ((Get-FileHash -LiteralPath $usageDesktop).Hash -eq $usageChangedHash) 'user-edited shortcut left untouched'
+    $collision = Join-Path $usageFixture 'collision'
+    New-Item -ItemType Directory -Path (Join-Path $collision 'menu') -Force | Out-Null
+    $foreign = Join-Path $collision 'menu\ChatGPT（统计）.lnk'
+    Write-UsageShortcut -Path $foreign -TargetPath (Join-Path $env:WINDIR 'notepad.exe')
+    $foreignHash = (Get-FileHash -LiteralPath $foreign).Hash
+    & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File (Join-Path $PSScriptRoot 'set-start-entry.ps1') -TestRoot $collision | Out-Null
+    Assert-Shortcut ($LASTEXITCODE -eq 0) 'a foreign menu entry does not prevent installing a new desktop entry'
+    foreach ($folder in @('desktop','menu')) {
+        $link = Join-Path $collision ($folder+'\Codex Meter.lnk')
+        Assert-Shortcut ((Read-UsageShortcut $link).TargetPath -eq (Join-Path $PSScriptRoot 'ChatGPT-Usage.exe')) 'both new entries use one available name and the current launcher'
+    }
+    Assert-Shortcut ((Get-FileHash -LiteralPath $foreign).Hash -eq $foreignHash) 'foreign statistics shortcut is preserved byte-for-byte'
+    & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File (Join-Path $PSScriptRoot 'set-start-entry.ps1') -TestRoot $collision | Out-Null
+    $collisionEntries = @(Get-Content (Join-Path $collision 'state\entries.json') -Raw | ConvertFrom-Json)
+    Assert-Shortcut ($LASTEXITCODE -eq 0 -and $collisionEntries.Count -eq 2) 'fallback name is stable on repeat setup without duplicate entries'
+    & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File (Join-Path $PSScriptRoot 'set-start-entry.ps1') -TestRoot $collision -Restore | Out-Null
+    Assert-Shortcut (-not (Test-Path (Join-Path $collision 'desktop\Codex Meter.lnk')) -and (Test-Path $foreign)) 'restore removes only the two new fallback entries'
     Write-Host "$usageChecks shortcut checks passed; real shortcuts were not accessed."
 } finally {
     $usageResolved = [IO.Path]::GetFullPath($usageFixture)

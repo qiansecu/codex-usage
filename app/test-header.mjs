@@ -101,7 +101,7 @@ function fixture(t, { autoWorkspace = true, rateResult, deferRates = false, nati
     getTargets: () => Promise.resolve({ targets: [{ id: 'fileManager' }] }),
     open: args => { opens.push(args); return Promise.resolve({ success: true }); }
   } } };
-  if (nativeIconAsset) nativeModule.oS = () => { iconInitializations++; nativeModule.aS = nativeIconAsset; };
+  if (nativeIconAsset) nativeModule[nativeExport === 'Qot' ? 'Ux' : 'oS'] = () => { iconInitializations++; nativeModule[nativeExport === 'Qot' ? 'Hx' : 'aS'] = nativeIconAsset; };
   createHeader({ window, document, location: { protocol: 'app:', pathname: '', hash: '' }, loadNative: async () => nativeModule });
   const controller = window.__codexUsageHeaderV1;
   t.after(() => controller.dispose());
@@ -456,4 +456,18 @@ test('attachment preview, surface replacement and UI reload cannot resize or mov
   assert.deepEqual(frame(), initial);
   attachment.remove(); reloaded.scan(); assert.deepEqual(frame(), initial);
   for (const type of ['dragenter', 'dragover', 'drop', 'dragend']) assert.equal(ui.document.listeners.has(type), false);
+});
+
+
+test('26.1021 audited bridge and gauge remain scoped to the current workspace and validated paths', async t => {
+  const ui = fixture(t, { nativeExport: 'Qot', nativeIconAsset: {
+    name: 'gauge-light-16', canvas: { viewBox: '0 0 16 16' }, body: '<path d="M1 2L3 4Z"/>'
+  } }); await ui.settle();
+  assert.equal(ui.controller.status().quotaIcon, 'native-gauge');
+  assert.equal(ui.iconInitializations(), 1);
+  assert.equal(ui.node('folder').disabled, false);
+  await ui.node('folder').listeners.get('click')({ isTrusted: true });
+  assert.equal(ui.opens.length, 1);
+  assert.equal(ui.opens[0].cwd, 'C:\\Work A');
+  assert.equal(ui.opens[0].target, 'fileManager');
 });

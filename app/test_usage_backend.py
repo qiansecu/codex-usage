@@ -134,5 +134,62 @@ class BackendTests(unittest.TestCase):
         self.assertIsNone(stats['modelActiveMs'])
 
 
+    def continuation(self, origin=0):
+        records = events(A, usage(200, 20, 50))
+        if origin:
+            records[0]['payload']['history_base'] = {'thread_id': B, 'end_ordinal_exclusive': origin}
+        base = self.write(A, records)
+        boundary = base.stat().st_size
+        with base.open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps({'type': 'event_msg', 'payload': {'type': 'task_started', 'turn_id': 'discarded'}}) + '\n')
+        newer = events(A, usage(30, 10, 10))
+        newer[0]['payload'].update(history_mode='paginated', history_base={
+            'thread_id': A, 'end_byte_offset': boundary, 'end_ordinal_exclusive': origin + len(records)})
+        for event in newer:
+            payload = event['payload']
+            if 'turn_id' in payload: payload['turn_id'] = B
+        newer[-1]['payload'].update(response_id='response-2', thread_token_usage=usage(230, 30, 60))
+        page = self.home / 'sessions' / f'rollout-test-{A}_{TURN}.jsonl'
+        page.write_text(''.join(json.dumps(record) + '\n' for record in newer), encoding='utf-8')
+        return base, page, newer
+
+    def test_paginated_same_thread_keeps_exact_prefix_and_incremental_usage(self):
+        base, page, records = self.continuation()
+        result = self.backend.get(A)
+        self.assertEqual(result['sourceState'], 'ready')
+        self.assertTrue(result['accountingMatches'])
+        self.assertEqual(result['reportedUsage']['total_tokens'], 260)
+        self.assertEqual(result['recordedTurns'], 2)
+        self.assertEqual({t['id'] for t in result['turns']}, {TURN, B})
+        self.assertEqual(result['steps'], 2)
+        with page.open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(records[-1]) + '\n')
+        self.assertEqual(self.backend.get(A)['steps'], 2)
+        base.unlink()
+        self.assertEqual(self.backend.get(A)['sourceState'], 'missing')
+
+    def test_paginated_ordinal_can_start_after_inherited_history(self):
+        self.continuation(origin=13)
+        self.assertTrue(self.backend.get(A)['accountingMatches'])
+        self.assertEqual(self.backend.get(A)['recordedTurns'], 2)
+
+    def test_paginated_bad_identity_and_boundaries_do_not_reuse_legacy_data(self):
+        _, page, records = self.continuation()
+        for change, state in [({'id': B}, 'identity-mismatch'),
+                              ({'history_base': {'thread_id': B, 'end_byte_offset': 10, 'end_ordinal_exclusive': 4}}, 'read-error'),
+                              ({'history_base': {'thread_id': A, 'end_byte_offset': 10, 'end_ordinal_exclusive': 4}}, 'read-error'),
+                              ({'history_base': {'thread_id': A, 'end_byte_offset': 999999, 'end_ordinal_exclusive': 4}}, 'read-error')]:
+            modified = json.loads(json.dumps(records))
+            modified[0]['payload'].update(change)
+            page.write_text(''.join(json.dumps(record) + '\n' for record in modified), encoding='utf-8')
+            self.assertEqual(self.backend.get(A)['sourceState'], state)
+
+    def test_multiple_continuations_are_ambiguous_instead_of_selecting_newest(self):
+        _, page, _ = self.continuation()
+        other = page.with_name(f'rollout-test-{A}_{B}.jsonl')
+        other.write_bytes(page.read_bytes())
+        self.assertEqual(self.backend.get(A)['sourceState'], 'ambiguous')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -15,12 +15,30 @@ function Test-InstalledExecutable {
 }
 
 function Get-InstalledProcessIdentity {
-    param([int]$ProcessId)
-    $taskProcess = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
-    if (-not $taskProcess) { return $null }
-    try {
-        return [ordered]@{ pid=$taskProcess.Id; executable=$taskProcess.Path; startTimeUtc=$taskProcess.StartTime.ToUniversalTime().ToString('o') }
-    } catch { throw 'Cannot read the launched process identity.' }
+    param(
+        [int]$ProcessId,
+        [scriptblock]$ReadProcess = { param($processId) Get-Process -Id $processId -ErrorAction SilentlyContinue },
+        [scriptblock]$Pause = { Start-Sleep -Milliseconds 50 }
+    )
+    $taskFirstStart = $null
+    for ($taskAttempt = 0; $taskAttempt -lt 6; $taskAttempt++) {
+        $taskProcess = & $ReadProcess $ProcessId
+        if (-not $taskProcess) { return $null }
+        $taskStart = $null
+        try {
+            $taskStart = $taskProcess.StartTime.ToUniversalTime().ToString('o')
+            if ($null -eq $taskFirstStart) { $taskFirstStart = $taskStart }
+            if ($taskStart -ne $taskFirstStart) { throw 'Process was replaced while reading its identity.' }
+            $taskExecutable = $taskProcess.Path
+            if ($taskExecutable) {
+                return [ordered]@{pid=$taskProcess.Id;executable=$taskExecutable;startTimeUtc=$taskStart}
+            }
+        } catch {
+            if ($taskStart -and $taskFirstStart -and $taskStart -ne $taskFirstStart) { throw }
+        }
+        if ($taskAttempt -lt 5) { & $Pause }
+    }
+    throw ("Cannot read complete process identity for PID {0}; no incomplete identity was saved." -f $ProcessId)
 }
 
 function Get-ProcessStartUtcTicks {
@@ -45,6 +63,22 @@ function Test-SameInstalledProcess {
     return $null -ne $taskSavedTicks -and $null -ne $taskCurrentTicks -and $taskSavedTicks -eq $taskCurrentTicks
 }
 
+function Resolve-RecordedInjectorIdentity {
+    param($Saved, $Current, [string]$ExpectedExecutable)
+    # Older startup records could capture Path before Node had finished becoming queryable.
+    # Recovery still requires the originally selected runtime plus the exact PID and creation time.
+    if (-not $Saved -or -not $Current -or -not $ExpectedExecutable -or -not $Current.executable -or
+        -not $Current.executable.Equals($ExpectedExecutable,[StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Statistics runtime identity does not match; nothing was stopped.'
+    }
+    $taskCandidate = [ordered]@{pid=$Saved.pid;executable=$Saved.executable;startTimeUtc=$Saved.startTimeUtc}
+    if (-not $taskCandidate.executable) { $taskCandidate.executable = $ExpectedExecutable }
+    if (-not (Test-SameInstalledProcess $taskCandidate $Current)) {
+        throw 'Statistics process identity changed; nothing was stopped.'
+    }
+    return $taskCandidate
+}
+
 function Stop-RecordedInstalledProcess {
     param($Identity)
     if (-not $Identity) { return }
@@ -59,4 +93,4 @@ function Stop-RecordedInstalledProcess {
     if (-not $taskProcess.WaitForExit(5000)) { throw 'Recorded installed process did not exit.' }
 }
 
-Export-ModuleMember -Function Test-InstalledExecutable,Get-InstalledProcessIdentity,Test-SameInstalledProcess,Stop-RecordedInstalledProcess
+Export-ModuleMember -Function Test-InstalledExecutable,Get-InstalledProcessIdentity,Test-SameInstalledProcess,Stop-RecordedInstalledProcess,Resolve-RecordedInjectorIdentity
