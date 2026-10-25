@@ -59,7 +59,7 @@ pwsh -NoProfile -File .\app\start-installed.ps1 -CodexHome 'D:\CodexData'
 ## 第三步：核实实际结果
 
 - 检查`app/runtime-installed/status.json`时间晚于本次启动，阶段为usage-status、状态updated。日志为空或只看到窗口打开不够。
-- 确认UI至少出现在可识别的工作聊天中；没有本地记录的数据可以是“—”，不能编造数值。让用户确认头像上方额度开关与原生菜单正常；无需替用户发送消息。
+- 确认UI至少出现在可识别的工作聊天中；没有本地记录的数据可以是“—”，不能编造数值。额度与头像菜单使用客户端原生功能，本工具不应增加或接管这些控件；无需替用户发送消息。
 - 导入launcher/shortcut-helpers.psm1并用Read-UsageShortcut读取两个新快捷方式的目标：应为本项目的launcher/ChatGPT-Usage.exe，或PowerShell 7加本项目app/start-installed.ps1参数。不能是普通客户端EXE、旧实验副本或别的目录。
 - 确认普通客户端原有快捷方式没有被替换；重复设置只保留两个本工具入口。首次遇到其他目标占用同名入口时，保留它，使用脚本选出的Codex Meter替代名称；实际路径以launcher/state/entries.json为准。已记录入口若后来被用户修改，保留并报告冲突，不强制覆盖。
 - 若统计已运行但快捷方式失败，检查shortcut-error.json并运行launcher/set-default.cmd重试。不要为快捷方式错误关闭正常工作的窗口。

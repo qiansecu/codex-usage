@@ -49,4 +49,4 @@ TPS使用纯文本响应样本的非推理输出除以生成耗时；模型活�
 
 新客户端适配须先按 [更新指南](TROUBLESHOOTING.md)核对真实结构，再增加有意义的行为测试。不要仅把断言改成当前输出而不核对语义。
 
-scripts/install-dialog.psm1使用Windows内置WPF，不新增第三方界面依赖。离屏预览渲染与真实确认共用控件；默认回车及Esc均为稍后。当前完整回归共187项，实际验收范围见RELEASE-CHECKS.md。
+scripts/install-dialog.psm1使用Windows内置WPF，不新增第三方界面依赖。离屏预览渲染与真实确认共用控件；默认回车及Esc均为稍后。当前完整回归共174项，实际验收范围见RELEASE-CHECKS.md。
