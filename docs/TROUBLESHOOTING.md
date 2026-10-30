@@ -186,3 +186,10 @@ UI源码修改后运行 `app/build-ui.cmd`，已连接的注入器自动加载�
 本机实际状态为workspaceState=unavailable，按钮被禁用。只读核对安装包发现app-shared改为b9a49a97ca55，app-initial-4267e52fe5b0通过Vct导出读取同一服务门面并调用openIn.getTargets/open；旧三个模块路径不再适用。更新映射并继续检查openIn两方法及fileManager目标，参数和可释放请求口径保持。原生模块加载失败会清除失败Promise，后续刷新可以恢复。
 
 本机热加载后workspaceReady=true，用户实际点击确认打开正确工作区；未重启客户端。不要为修复按钮改写DOM中的路径或按旧会话缓存直接打开目录。
+
+
+## 发布时报Unexpected repository location
+
+如果项目没有移动，却在双击发布入口后出现此提示，先检查Git输出的中文路径是否因控制台编码发生乱码。旧入口已统一UTF-8，但2026-10-31新发布入口遗漏了同样的初始化，导致工具环境通过、普通桌面失败；该次错误发生在联网与上传之前。
+
+修复应在所有Git调用前同时设置Console.OutputEncoding和PowerShell的OutputEncoding为无BOM UTF-8，保留严格的仓库位置检查。测试必须覆盖含中文/空格路径及非UTF-8控制台，不能靠放宽路径比较或直接删除检查解决。具体代码与发布前验证步骤见[PUBLISHING](PUBLISHING.md)。
