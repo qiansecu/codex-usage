@@ -1,6 +1,7 @@
 export function createHeader(options) {
   'use strict';
-  const { window, document, location, loadNative = () => import('/assets/app-shared-955d52676f9c.js')
+  const { window, document, location, loadNative = () => import('/assets/app-shared-b9a49a97ca55.js')
+    .catch(() => import('/assets/app-shared-955d52676f9c.js'))
     .catch(() => import('/assets/app-shared-bbfeca5e5737.js'))
     .catch(() => import('/assets/app-shared-30671c57ec82.js')) } = options;
   const key = '__codexUsageHeaderV1';
@@ -50,12 +51,12 @@ export function createHeader(options) {
 
   async function nativeService() {
     if (service) return service;
-    // Audited exports: Qot in 26.1021.3705.0, Kat in 26.1013.4894.0, fN in 26.1007.9446.0. A mismatch fails closed.
+    // Vct is the service facade used as Qi.openIn in app-initial of 26.1027.3384.0.
     servicePromise ??= loadNative().then(module => {
-      const api = module.Qot ?? module.Kat ?? module.fN;
+      const api = module.Vct ?? module.Qot ?? module.Kat ?? module.fN;
       if (typeof api?.openIn?.open !== 'function' || typeof api?.openIn?.getTargets !== 'function') throw new Error('Native file manager unavailable');
       return api;
-    });
+    }).catch(error => { servicePromise = null; throw error; });
     service = await servicePromise;
     return service;
   }

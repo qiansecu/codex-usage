@@ -41,7 +41,7 @@ class Element {
   dispatchEvent(event) { this.listeners.get(event.type)?.(event); return true; }
 }
 
-function fixture(t, { autoWorkspace = true, nativeExport = 'fN' } = {}) {
+function fixture(t, { autoWorkspace = true, nativeExport = 'fN', nativeFailures = 0 } = {}) {
   const document = new Element('document', true), toolbar = new Element('div'), nativeToolbar = new Element('div'), row = new Element('div'), action = new Element('button');
   document.head = new Element('head'); document.body = new Element('body'); document.append(document.head, document.body);
   toolbar.setAttribute('role', 'toolbar'); nativeToolbar.className = '@container/app-shell-header-toolbar';
@@ -76,7 +76,10 @@ function fixture(t, { autoWorkspace = true, nativeExport = 'fN' } = {}) {
     getTargets: () => Promise.resolve({ targets: [{ id: 'fileManager' }] }),
     open: args => { opens.push(args); return Promise.resolve({ success: true }); }
   } } };
-  createHeader({ window, document, location: { protocol: 'app:', pathname: '', hash: '' }, loadNative: async () => nativeModule });
+  createHeader({ window, document, location: { protocol: 'app:', pathname: '', hash: '' }, loadNative: async () => {
+    if (nativeFailures-- > 0) throw new Error('Native module temporarily unavailable');
+    return nativeModule;
+  } });
   const controller = window.__codexUsageHeaderV1;
   t.after(() => controller.dispose());
   return { controller, document, window, listeners, row, toolbar, sidebar, rail, nativeUsage, profile, settings, requests, respond, notify, opens,
@@ -103,7 +106,17 @@ test('retired tool preference is removed without touching native preferences', a
   assert.equal(ui.listeners.has('storage'), false);
 });
 
-for (const nativeExport of ['fN', 'Kat', 'Qot']) test(`audited ${nativeExport} bridge opens only the current workspace`, async t => {
+test('a transient native module failure can recover on refresh instead of caching rejection forever', async t => {
+  const ui = fixture(t, { nativeExport: 'Vct', nativeFailures: 1 }); await ui.settle();
+  assert.equal(ui.controller.status().workspaceState, 'unavailable');
+  assert.equal(ui.node('folder').disabled, true);
+  ui.notify({ method: 'account/updated', params: {} }); await ui.settle();
+  assert.equal(ui.controller.status().workspaceReady, true);
+  await ui.node('folder').listeners.get('click')({ isTrusted: true });
+  assert.equal(ui.opens.length, 1);
+});
+
+for (const nativeExport of ['fN', 'Kat', 'Qot', 'Vct']) test(`audited ${nativeExport} bridge opens only the current workspace`, async t => {
   const ui = fixture(t, { nativeExport }); await ui.settle();
   assert.equal(ui.node('folder').disabled, false);
   await ui.node('folder').listeners.get('click')({ isTrusted: true });
