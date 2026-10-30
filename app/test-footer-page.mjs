@@ -68,7 +68,7 @@ function fixture(t) {
       summary: { turns: 1, steps: 1, totalTokens: 200, contextPercent: 4, ...summaryExtra },
       replies: { [slot]: { turnId: turn, totalTokens: 200, status: 'completed', ...replyExtra } } });
   };
-  return { controller, body, layout, composer, textarea, timestamp, reply, location, label, apply, listeners, wakes: () => wakeCount };
+  return { controller, window, body, layout, composer, textarea, timestamp, reply, location, label, apply, listeners, wakes: () => wakeCount };
 }
 
 test('loading is hidden but still exposes IDs; switching immediately hides the old chat', t => {
@@ -89,6 +89,20 @@ test('loading is hidden but still exposes IDs; switching immediately hides the o
   assert.equal(switched.visibleComposerCount, 0);
   assert.equal(ui.apply(first).state, 'stale-frame');
   assert.ok(ui.wakes() > wakes);
+});
+
+test('a broken optional workspace controller does not take down token statistics', t => {
+  const ui = fixture(t);
+  ui.controller.status();
+  let disposed = false;
+  ui.controller.status();
+  // Install a failing native-feature adapter after the independent footer is alive.
+  const contextWindow = { scan() { throw new Error('native structure changed'); }, dispose() { disposed = true; } };
+  // The fixture exposes its actual page window rather than testing a duplicate implementation.
+  ui.window.__codexUsageHeaderV1 = contextWindow;
+  assert.equal(ui.apply(first).matchedReplies, 1);
+  assert.equal(disposed, true);
+  assert.equal(ui.controller.status().headerFailed, true);
 });
 
 test('reply detail binds the clicked turn, updates values, toggles and dismisses on Escape/outside', t => {

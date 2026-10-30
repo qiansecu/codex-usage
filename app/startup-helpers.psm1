@@ -26,7 +26,7 @@ function Save-UsageLaunchOptions {
 }
 
 function Wait-UsageReady {
-    param([string]$RuntimeDirectory, [DateTimeOffset]$StartedAt, [int]$TimeoutMilliseconds = 15000)
+    param([string]$RuntimeDirectory, [DateTimeOffset]$StartedAt, [int]$TimeoutMilliseconds = 60000)
     $usageDeadline = [DateTimeOffset]::UtcNow.AddMilliseconds($TimeoutMilliseconds)
     do {
         $usageStatus = $null
@@ -41,6 +41,12 @@ function Wait-UsageReady {
             if ($usageStatus.stage -eq 'error') { throw ('Statistics startup failed: ' + $usageStatus.error) }
             if ($usageStatus.stage -eq 'usage-status' -and $usageStatus.state -eq 'updated') { return }
         }
+        $usageReady = $null
+        try {
+            $usageReady = Get-Content -LiteralPath (Join-Path $RuntimeDirectory 'ready.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+            $usageReadyAt = if ($usageReady.at -is [DateTime]) { [DateTimeOffset]$usageReady.at } else { [DateTimeOffset]::Parse($usageReady.at) }
+            if ($usageReadyAt -ge $StartedAt -and $usageReady.stage -eq 'ready' -and $usageReady.state -eq 'installed') { return }
+        } catch { }
         if ([DateTimeOffset]::UtcNow -ge $usageDeadline) { break }
         Start-Sleep -Milliseconds 150
     } while ($true)

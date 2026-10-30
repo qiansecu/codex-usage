@@ -44,8 +44,9 @@ export function selectTarget(all, port, preferredId = null) {
 }
 
 export class CDP {
-  constructor(socket) {
+  constructor(socket, { timeoutMs = 8000 } = {}) {
     this.socket = socket;
+    this.timeoutMs = timeoutMs;
     this.nextId = 0;
     this.pending = new Map();
     this.listeners = new Map();
@@ -79,13 +80,31 @@ export class CDP {
   call(method, params) {
     return new Promise((resolve, reject) => {
       const id = ++this.nextId;
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('CDP command timed out')); }, 8000);
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        const error = new Error(`CDP command timed out: ${method}`);
+        error.code = 'CDP_TIMEOUT'; error.method = method;
+        reject(error);
+      }, this.timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       try { this.socket.send(JSON.stringify({ id, method, params })); }
       catch (error) { clearTimeout(timer); this.pending.delete(id); reject(error); }
     });
   }
   close() { this.socket.close(); }
+}
+
+// Only idempotent UI reads/renders may be retried, on this same verified connection.
+export async function recoverPage(operation, { onRetry = () => {}, pause = ms => new Promise(resolve => setTimeout(resolve, ms)), stopped = () => false, retries = 3 } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    if (stopped()) return null;
+    try { return await operation(); } catch (error) {
+      const transient = error.code === 'CDP_TIMEOUT' || /Execution context was destroyed|Cannot find context with specified id/.test(error.message);
+      if (!transient || attempt >= retries || stopped()) throw error;
+      onRetry({ attempt: attempt + 1, command: error.method ?? 'Runtime.evaluate', reason: error.code ?? 'CONTEXT_CHANGED' });
+      await pause(Math.min(2000, 250 * 2 ** attempt));
+    }
+  }
 }
 
 // Preserve wake-ups arriving during a read, and coalesce a burst into one refresh.
@@ -157,6 +176,10 @@ async function main(sessionFile) {
   const backend = new UsageClient(python, path.join(root, 'usage_backend.py'), home);
   log('connected', { targetId: target.id, launchKey: launchKey(session) });
   let lastStatus, lastSource, lastUsage, targetRecorded = false;
+  const readyFile = path.join(runtime, 'ready.json');
+  const recover = operation => recoverPage(operation, {
+    stopped: () => fs.existsSync(stopFile), onRetry: values => log('recovering', values),
+  });
   try {
     await cdp.call('Runtime.enable', {});
     await cdp.call('Runtime.addBinding', { name: wakeName });
@@ -168,7 +191,8 @@ async function main(sessionFile) {
         await cdp.call('Runtime.evaluate', { expression: 'window.__codexUsageLayoutProbeV1?.dispose()', returnByValue: true });
       }
       lastSource = expression;
-      const result = await cdp.call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: false });
+      const result = await recover(() => cdp.call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: false }));
+      if (!result) break;
       if (result.exceptionDetails) throw new Error('Placeholder script raised an exception');
       const value = result.result?.value;
       if (!value || value.state !== 'installed') throw new Error('Selected document rejected the placeholder');
@@ -179,10 +203,17 @@ async function main(sessionFile) {
       if (JSON.stringify(value) !== lastStatus) { lastStatus = JSON.stringify(value); log('binding-status', value); }
       const snapshot = await backend.read(value.threadId);
       const data = bindUsage(value, snapshot);
-      const applied = await cdp.call('Runtime.evaluate', {
+      const applied = await recover(() => cdp.call('Runtime.evaluate', {
         expression: `window.__codexUsageLayoutProbeV1?.setData(${JSON.stringify(data)})`, returnByValue: true,
-      });
+      }));
+      if (!applied) break;
       if (applied.exceptionDetails) throw new Error('Usage display update failed');
+      if (!['updated', 'stale-frame'].includes(applied.result?.value?.state)) throw new Error('Usage controller is unavailable');
+      // An empty home page is a healthy connection, even before a thread is open.
+      const readiness = { at: new Date().toISOString(), stage: 'ready', state: 'installed',
+        layout: value.composerCount ? 'ready' : 'waiting-layout', launchKey: launchKey(session) };
+      fs.writeFileSync(readyFile + '.tmp', JSON.stringify(readiness, null, 2));
+      fs.renameSync(readyFile + '.tmp', readyFile);
       fs.writeFileSync(path.join(runtime, 'usage-snapshot.json'), JSON.stringify(snapshot, null, 2));
       fs.writeFileSync(path.join(runtime, 'display-data.json'), JSON.stringify(data, null, 2));
       const report = { ...applied.result?.value, sourceState: data.sourceState, summary: data.summary };

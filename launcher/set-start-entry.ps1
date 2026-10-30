@@ -4,7 +4,7 @@ Import-Module (Join-Path $PSScriptRoot 'shortcut-helpers.psm1') -Force
 $taskRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 $taskQuietLauncher = Join-Path $taskRoot 'ChatGPT-Usage.exe'
 $taskScriptHost = Join-Path $PSHOME 'pwsh.exe'
-$taskLaunchScript = [IO.Path]::GetFullPath((Join-Path $taskRoot '..\app\start-installed.ps1'))
+$taskLaunchScript = [IO.Path]::GetFullPath((Join-Path $taskRoot '..\scripts\launch.ps1'))
 $taskScriptArguments = '-NoProfile -WindowStyle Hidden -File "' + $taskLaunchScript + '"'
 $taskLauncher = if (-not $ScriptMode -and (Test-Path -LiteralPath $taskQuietLauncher)) { $taskQuietLauncher } else { $taskScriptHost }
 $taskArguments = if ($taskLauncher -eq $taskQuietLauncher) { '' } else { $taskScriptArguments }

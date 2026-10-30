@@ -9,7 +9,7 @@ internal static class StartUsage {
     [STAThread]
     private static int Main() {
         string root = AppDomain.CurrentDomain.BaseDirectory;
-        string script = Path.GetFullPath(Path.Combine(root, "..", "app", "start-installed.ps1"));
+        string script = Path.GetFullPath(Path.Combine(root, "..", "scripts", "launch.ps1"));
         string powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "PowerShell", "7", "pwsh.exe");
         if (!File.Exists(powershell)) {
             foreach (string directory in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator)) {

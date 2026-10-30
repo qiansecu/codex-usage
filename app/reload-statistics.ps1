@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'installed-helpers.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'runtime-helpers.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'startup-helpers.psm1') -Force
 $detailRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 $detailRuntime = Join-Path $detailRoot 'runtime-installed'
 $detailSession = Get-Content -LiteralPath (Join-Path $detailRuntime 'session.json') -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -35,23 +36,5 @@ if (Test-Path -LiteralPath $detailStop) { Remove-Item -LiteralPath $detailStop }
 $detailReloadAt = [DateTimeOffset]::UtcNow
 $detailInjector = Start-Process -FilePath $detailNode -ArgumentList @(('"' + (Join-Path $detailRoot 'injector.mjs') + '"'),('"' + (Join-Path $detailRuntime 'session.json') + '"')) -WorkingDirectory $detailRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $detailRuntime 'injector.log') -RedirectStandardError (Join-Path $detailRuntime 'injector-error.log') -PassThru
 [ordered]@{identity=(Get-InstalledProcessIdentity -ProcessId $detailInjector.Id);nodeExecutable=$detailNode;startedAt=[DateTimeOffset]::UtcNow.ToString('o')} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $detailRuntime 'injector-session.json') -Encoding UTF8
-$detailDeadline = [DateTime]::UtcNow.AddSeconds(15)
-while ([DateTime]::UtcNow -lt $detailDeadline) {
-    $detailInjector.Refresh()
-    $detailStatus = $null
-    try { $detailStatus = Get-Content -LiteralPath (Join-Path $detailRuntime 'status.json') -Raw -Encoding UTF8 | ConvertFrom-Json } catch { }
-    $detailStatusAt = $null
-    try {
-        if ($detailStatus) { $detailStatusAt = if ($detailStatus.at -is [DateTime]) { [DateTimeOffset]$detailStatus.at } else { [DateTimeOffset]::Parse($detailStatus.at) } }
-    } catch { }
-    if ($null -ne $detailStatusAt -and $detailStatusAt -ge $detailReloadAt) {
-        if ($detailStatus.stage -eq 'error') { throw ('Statistics reload failed: ' + $detailStatus.error) }
-        if ($detailStatus.stage -eq 'usage-status' -and $detailStatus.state -eq 'updated') {
-            Write-Host 'Statistics reloaded. The client and chat were left open.'
-            return
-        }
-    }
-    if ($detailInjector.HasExited) { throw 'Statistics process exited; see runtime-installed\injector-error.log.' }
-    Start-Sleep -Milliseconds 200
-}
-throw 'Statistics is still starting; see runtime-installed\status.json.'
+Wait-UsageReady -RuntimeDirectory $detailRuntime -StartedAt $detailReloadAt
+Write-Host 'Statistics reloaded. The client and chat were left open.'

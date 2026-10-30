@@ -6,7 +6,7 @@ Import-Module (Join-Path $PSScriptRoot '..\app\startup-helpers.psm1') -Force
 function Get-UsageInstallLauncher {
     param([string]$ProjectRoot)
     $usageRoot = [IO.Path]::GetFullPath($ProjectRoot)
-    $usageScript = Join-Path $usageRoot 'app\start-installed.ps1'
+    $usageScript = Join-Path $usageRoot 'scripts\launch.ps1'
     if (-not (Test-Path -LiteralPath $usageScript -PathType Leaf)) { throw 'Statistics start script is missing.' }
     $usageExe = Join-Path $usageRoot 'launcher\ChatGPT-Usage.exe'
     if (Test-Path -LiteralPath $usageExe -PathType Leaf) {

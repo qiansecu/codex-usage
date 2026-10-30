@@ -24,16 +24,6 @@ try {
     }
     & $taskNode (Join-Path $taskRoot 'build-ui.mjs')
     if ($LASTEXITCODE -ne 0) { throw 'UI generation failed.' }
-    Set-Content -LiteralPath $taskStop -Value 'stop' -Encoding ASCII
-    $taskPreviousFile = Join-Path $taskRuntime 'injector-session.json'
-    if (Test-Path -LiteralPath $taskPreviousFile) {
-        $taskPrevious = Get-Content -LiteralPath $taskPreviousFile -Raw -Encoding UTF8 | ConvertFrom-Json
-        $taskOldIdentity = Get-InstalledProcessIdentity -ProcessId $taskPrevious.identity.pid
-        if (Test-SameInstalledProcess -Saved $taskPrevious.identity -Current $taskOldIdentity) {
-            $taskOldInjector = Get-Process -Id $taskPrevious.identity.pid -ErrorAction Stop
-            if (-not $taskOldInjector.WaitForExit(12000)) { throw 'Old injector did not stop. Use restore-installed.cmd first.' }
-        }
-    }
     $taskPackages = @(Get-AppxPackage -Name 'OpenAI.Codex' -ErrorAction Stop | Where-Object { $_.PackageFamilyName -eq 'OpenAI.Codex_2p2nqsd0c76g0' })
     if ($taskPackages.Count -ne 1) { throw 'Cannot uniquely identify the current registered OpenAI.Codex Store package.' }
     $taskPackage = $taskPackages[0]
@@ -53,6 +43,16 @@ try {
         try { $taskPath = $taskProcess.Path } catch { continue }
         if (Test-InstalledExecutable -Executable $taskPath -InstallLocation $taskPackage.InstallLocation -AllowedExecutables $taskAllowed) {
             throw 'Installed client is still running. Fully exit it, including its background process, then run this script again.'
+        }
+    }
+    Set-Content -LiteralPath $taskStop -Value 'stop' -Encoding ASCII
+    $taskPreviousFile = Join-Path $taskRuntime 'injector-session.json'
+    if (Test-Path -LiteralPath $taskPreviousFile) {
+        $taskPrevious = Get-Content -LiteralPath $taskPreviousFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        $taskOldIdentity = Get-InstalledProcessIdentity -ProcessId $taskPrevious.identity.pid
+        if (Test-SameInstalledProcess -Saved $taskPrevious.identity -Current $taskOldIdentity) {
+            $taskOldInjector = Get-Process -Id $taskPrevious.identity.pid -ErrorAction Stop
+            if (-not $taskOldInjector.WaitForExit(12000)) { throw 'Old injector did not stop. Use restore-installed.cmd first.' }
         }
     }
     if (-not $CodexHome) {

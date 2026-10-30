@@ -76,3 +76,10 @@ pwsh -NoProfile -File .\app\start-installed.ps1 -CodexHome 'D:\CodexData'
 先保存工作，`app/restore-installed.cmd`关闭本次调试实例；`launcher/restore-shortcuts.cmd`恢复本工具的同名统计入口，不影响普通客户端原入口。保留launcher/state直到恢复完成。正常入口仍可启动原客户端；卸载不删除任何官方配置或会话。
 
 本说明只授权安装、验证和必要排查，不要求提交Git、创建Release或向外发送数据。
+
+
+## 自动更新与升级验收
+
+1.1.0的静默启动器及PowerShell回退入口都必须指向scripts/launch.ps1；首次/升级安装通过setup准备、建立源码基线并保留用户重启确认。不要直接执行默认setup来绕过确认，不要替用户点击重启。仅更新源码但保留旧EXE入口会绕过自动更新检查。
+
+自动更新来自固定公开仓库的稳定Release，默认开启，CODEX_USAGE_AUTO_UPDATE=0可关闭。保留app/runtime-updates中的个人状态与源码回退副本，不提交它们。开发用Git工作副本不自动更新。适配后核对本次ready、单轮及摘要；首页健康连接与已有统计数值分别验证。见[更新说明](UPDATES.md)。

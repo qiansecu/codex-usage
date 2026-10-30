@@ -46,7 +46,7 @@ try {
     foreach ($usagePath in $usageOrdinary.Keys) { Assert-Shortcut ((Get-FileHash -LiteralPath $usagePath).Hash -eq $usageOrdinary[$usagePath]) 'ordinary launcher shortcut remains byte-identical' }
     Assert-Shortcut ((Run-ShortcutSetup -DirectScript) -eq 0) 'PowerShell shortcut fallback succeeds'
     $usageFallback = Read-UsageShortcut -Path $usageMenu
-    Assert-Shortcut ($usageFallback.TargetPath -eq (Join-Path $PSHOME 'pwsh.exe') -and $usageFallback.Arguments.Contains('start-installed.ps1')) 'fallback points to this injection script, not the ordinary app'
+    Assert-Shortcut ($usageFallback.TargetPath -eq (Join-Path $PSHOME 'pwsh.exe') -and $usageFallback.Arguments.Contains('launch.ps1')) 'fallback points to the update-aware statistics entry'
     Assert-Shortcut ((Run-ShortcutSetup) -eq 0) 'repeat setup succeeds'
     $usageState = @(Get-Content -LiteralPath (Join-Path $usageFixture 'state\entries.json') -Raw | ConvertFrom-Json)
     Assert-Shortcut ($usageState.Count -eq 2) 'repeat setup preserves one backup record per shortcut'

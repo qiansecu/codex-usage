@@ -123,7 +123,7 @@ $usageFixtureBase = Join-Path $PSScriptRoot 'runtime-install-tests'
 $usageFixture = Join-Path $usageFixtureBase ([Guid]::NewGuid().ToString('N')+'-安装 空格')
 New-Item -ItemType Directory -Path (Join-Path $usageFixture 'app'),(Join-Path $usageFixture 'scripts'),(Join-Path $usageFixture 'launcher') -Force | Out-Null
 try {
-    $usageFakeStart = Join-Path $usageFixture 'app\start-installed.ps1'
+    $usageFakeStart = Join-Path $usageFixture 'scripts\launch.ps1'
     Set-Content -LiteralPath $usageFakeStart -Value '# synthetic entry, never execute a desktop client' -Encoding utf8
     $usageSpec=Get-UsageInstallLauncher $usageFixture
     Assert-Install ($usageSpec.kind -eq 'powershell-launcher' -and $usageSpec.file -eq (Join-Path $PSHOME 'pwsh.exe')) 'Missing optional compiler uses the current PowerShell host'
@@ -133,16 +133,16 @@ try {
     $usageSpec=Get-UsageInstallLauncher $usageFixture
     Assert-Install ($usageSpec.kind -eq 'quiet-launcher' -and $usageSpec.file -eq $usageFakeExe -and $usageSpec.arguments.Count -eq 0) 'Compiled statistics launcher takes precedence'
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'start.ps1') -Destination (Join-Path $usageFixture 'scripts\start.ps1')
-    $usageMarker = 'param([string]$CodexHome); Set-Content -LiteralPath (Join-Path $PSScriptRoot "route.txt") -Value $CodexHome'
-    Set-Content -LiteralPath (Join-Path $usageFixture 'scripts\setup.ps1') -Value $usageMarker -Encoding utf8
-    Set-Content -LiteralPath $usageFakeStart -Value $usageMarker -Encoding utf8
+    $usageMarker = 'param([string]$CodexHome); Set-Content -LiteralPath (Join-Path $PSScriptRoot "route.txt") -Value $CodexHome; Set-Content -LiteralPath (Join-Path $PSScriptRoot "ENTRY.flag") -Value yes'
+    Set-Content -LiteralPath (Join-Path $usageFixture 'scripts\setup.ps1') -Value $usageMarker.Replace('ENTRY','setup') -Encoding utf8
+    Set-Content -LiteralPath $usageFakeStart -Value $usageMarker.Replace('ENTRY','launch') -Encoding utf8
     & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File (Join-Path $usageFixture 'scripts\start.ps1') -CodexHome 'D:\Demo Sessions'
-    Assert-Install ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath (Join-Path $usageFixture 'scripts\route.txt')) -and -not (Test-Path -LiteralPath (Join-Path $usageFixture 'app\route.txt'))) 'First start enters installation instead of silently closing the client'
+    Assert-Install ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath (Join-Path $usageFixture 'scripts\setup.flag')) -and -not (Test-Path -LiteralPath (Join-Path $usageFixture 'scripts\launch.flag'))) 'First start enters installation instead of silently closing the client'
     Assert-Install ((Get-Content -LiteralPath (Join-Path $usageFixture 'scripts\route.txt')).Trim() -eq 'D:\Demo Sessions') 'Explicit session directory reaches first-install preparation'
     Set-Content -LiteralPath (Join-Path $usageFixture 'app\settings.local.json') -Value '{}' -Encoding utf8
     & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File (Join-Path $usageFixture 'scripts\start.ps1') -CodexHome 'D:\Other Sessions'
-    Assert-Install ($LASTEXITCODE -eq 0 -and (Get-Content -LiteralPath (Join-Path $usageFixture 'app\route.txt')).Trim() -eq 'D:\Other Sessions') 'Daily startup bypasses the installation prompt and forwards explicit session settings'
-    foreach ($usageFile in @('setup.ps1','start.ps1','install-helpers.psm1','install-dialog.psm1','test-install-flow.ps1')) {
+    Assert-Install ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath (Join-Path $usageFixture 'scripts\launch.flag')) -and (Get-Content -LiteralPath (Join-Path $usageFixture 'scripts\route.txt')).Trim() -eq 'D:\Other Sessions') 'Daily startup bypasses the installation prompt and forwards explicit session settings'
+    foreach ($usageFile in @('setup.ps1','start.ps1','install-helpers.psm1','install-dialog.psm1','test-install-flow.ps1','launch.ps1','update-helpers.psm1','build-release.ps1','test-updates.ps1')) {
         $usageTokens=$null;$usageErrors=$null
         [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $usageFile),[ref]$usageTokens,[ref]$usageErrors) | Out-Null
         Assert-Install (-not $usageErrors.Count) ('PowerShell parses: '+$usageFile)

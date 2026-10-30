@@ -335,7 +335,11 @@
 
   function scan() {
     if (disposed || !document.body) return;
-    window.__codexUsageHeaderV1?.scan?.();
+    try { window.__codexUsageHeaderV1?.scan?.(); } catch {
+      window.__codexUsageHeaderErrorV1 = true;
+      try { window.__codexUsageHeaderV1?.dispose?.(); } catch { }
+      delete window.__codexUsageHeaderV1;
+    }
     const id = identity().threadId;
     if (frame && frame.threadId !== id) frame = null;
     const fresh = frame && Date.now() - Date.parse(frame.sampledAt) < 8000;
@@ -387,7 +391,7 @@
     scan();
     // Hidden loading labels must still supply turn IDs to the data reader.
     const rows = [...owned.entries()].filter(([anchor]) => visible(anchor));
-    return { state: 'installed', header: window.__codexUsageHeaderV1?.status?.(), ...identity(), replyCount: rows.filter(([, entry]) => entry.kind === 'reply').length,
+    return { state: 'installed', header: window.__codexUsageHeaderV1?.status?.(), headerFailed: !!window.__codexUsageHeaderErrorV1, ...identity(), replyCount: rows.filter(([, entry]) => entry.kind === 'reply').length,
       composerCount: rows.filter(([, entry]) => entry.kind === 'composer').length,
       visibleReplyCount: rows.filter(([, entry]) => entry.kind === 'reply' && visible(entry.element)).length,
       visibleComposerCount: rows.filter(([, entry]) => entry.kind === 'composer' && visible(entry.element)).length,
@@ -419,6 +423,7 @@
     for (const entry of owned.values()) entry.element.remove();
     owned.clear();
     delete window[key];
+    delete window.__codexUsageHeaderErrorV1;
     return { state: 'removed' };
   }
 

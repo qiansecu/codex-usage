@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import { CDP, validTarget, RefreshSignal, selectTarget, previousTarget, launchKey } from './injector.mjs';
+import { CDP, validTarget, RefreshSignal, selectTarget, previousTarget, launchKey, recoverPage } from './injector.mjs';
 
 const target = { type: 'page', url: 'app://-/index.html', webSocketDebuggerUrl: 'ws://127.0.0.1:9333/devtools/page/test' };
 test('accepts application page only on the validated loopback port', () => {
@@ -110,4 +110,33 @@ test('polling remains available when there is no navigation notification', async
   assert.equal(refresh.finish, null);
   refresh.wake();
   await refresh.wait(10000);
+});
+
+test('a transient page timeout recovers, while disconnects and script errors fail immediately', async () => {
+  let calls = 0;
+  const retries = [];
+  const operation = async () => { if (++calls < 3) throw Object.assign(new Error('slow page'), { code: 'CDP_TIMEOUT', method: 'Runtime.evaluate' }); return 'ready'; };
+  assert.equal(await recoverPage(operation, { pause: async () => {}, onRetry: value => retries.push(value) }), 'ready');
+  assert.equal(retries.length, 2);
+  for (const message of ['CDP disconnected', 'Placeholder script raised an exception']) {
+    let attempts = 0;
+    await assert.rejects(recoverPage(async () => { attempts++; throw new Error(message); }, { pause: async () => {} }), new RegExp(message));
+    assert.equal(attempts, 1);
+  }
+});
+
+test('page recovery is bounded and stopping cancels queued retries', async () => {
+  let attempts = 0;
+  const operation = async () => { attempts++; throw Object.assign(new Error('timeout'), { code: 'CDP_TIMEOUT' }); };
+  await assert.rejects(recoverPage(operation, { pause: async () => {} }), /timeout/);
+  assert.equal(attempts, 4);
+  assert.equal(await recoverPage(operation, { stopped: () => true }), null);
+  assert.equal(attempts, 4);
+});
+
+test('timed-out commands expose the method, never command arguments, and late responses are ignored', async () => {
+  const socket = new FakeSocket(), cdp = new CDP(socket, { timeoutMs: 5 });
+  await assert.rejects(cdp.call('Runtime.evaluate', { expression: 'private fixture' }), error => error.code === 'CDP_TIMEOUT' && error.method === 'Runtime.evaluate' && !error.message.includes('private fixture'));
+  socket.reply({ id: socket.sent[0].id, result: {} });
+  assert.equal(cdp.pending.size, 0);
 });

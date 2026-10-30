@@ -1,0 +1,39 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Verify version and sources
+        shell: pwsh
+        run: |
+          $version = (Get-Content app/version.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -cne ('v' + $version)) { throw 'Tag/version mismatch' }
+          ./app/build-ui.ps1
+          ./app/check-local.ps1
+          ./scripts/build-launcher.ps1
+          ./launcher/test-shortcuts.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Shortcut checks failed' }
+          ./app/test-startup-helpers.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Startup checks failed' }
+          node --test scripts/test-public.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Public scanner tests failed' }
+          node scripts/check-public.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Public source check failed' }
+          ./scripts/build-release.ps1
+      - name: Publish tested source archive
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$env:GITHUB_REF_NAME" dist/codex-usage.zip --verify-tag --title "Codex Meter $env:GITHUB_REF_NAME" --generate-notes

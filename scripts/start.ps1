@@ -5,5 +5,5 @@ $usageSettings = Join-Path $usageProject 'app\settings.local.json'
 if (-not (Test-Path -LiteralPath $usageSettings -PathType Leaf)) {
     & (Join-Path $PSScriptRoot 'setup.ps1') -CodexHome $CodexHome
 } else {
-    & (Join-Path $usageProject 'app\start-installed.ps1') -CodexHome $CodexHome
+    & (Join-Path $usageProject 'scripts\launch.ps1') -CodexHome $CodexHome
 }

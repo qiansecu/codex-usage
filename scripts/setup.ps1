@@ -10,6 +10,8 @@ if ($Shortcuts) {
     if ($LASTEXITCODE -ne 0) { throw 'Shortcut setup failed.' }
 }
 Write-Host 'Installation files are ready. No Windows login startup entry was added.'
+Import-Module (Join-Path $PSScriptRoot 'update-helpers.psm1') -Force
+Save-UsageUpdateBaseline -ProjectRoot $usageProject
 if ($PrepareOnly) {
     Write-Host 'Preparation only: no restart prompt, no client started or closed.'
     return

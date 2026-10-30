@@ -32,6 +32,18 @@ try {
     $usageRejected = $false
     try { Wait-UsageReady -RuntimeDirectory $usageFixture -StartedAt $usageAt -TimeoutMilliseconds 0 } catch { $usageRejected = $_.Exception.Message.Contains('synthetic startup failure') }
     Assert-Startup $usageRejected 'current injection failure is reported without installing shortcuts'
+    Set-FixtureStatus @{at=$usageAt.ToString('o');stage='usage-status';state='stale-frame'}
+    @{at=$usageAt.AddSeconds(-60).ToString('o');stage='ready';state='installed'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $usageFixture 'ready.json') -Encoding utf8
+    $usageRejected = $false
+    try { Wait-UsageReady -RuntimeDirectory $usageFixture -StartedAt $usageAt -TimeoutMilliseconds 0 } catch { $usageRejected = $true }
+    Assert-Startup $usageRejected 'old readiness marker cannot confirm a new launch'
+    @{at=$usageAt.ToString('o');stage='ready';state='installed';layout='waiting-layout'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $usageFixture 'ready.json') -Encoding utf8
+    Wait-UsageReady -RuntimeDirectory $usageFixture -StartedAt $usageAt -TimeoutMilliseconds 0
+    Assert-Startup $true 'healthy injection on the home page succeeds before a thread is open'
+    Set-FixtureStatus @{at=$usageAt.ToString('o');stage='error';error='failed after ready'}
+    $usageRejected = $false
+    try { Wait-UsageReady -RuntimeDirectory $usageFixture -StartedAt $usageAt -TimeoutMilliseconds 0 } catch { $usageRejected = $_.Exception.Message.Contains('failed after ready') }
+    Assert-Startup $usageRejected 'a current error takes priority over an earlier ready marker'
     Set-FixtureStatus @{at=$usageAt.ToString('o');stage='usage-status';state='updated'}
     Wait-UsageReady -RuntimeDirectory $usageFixture -StartedAt $usageAt -TimeoutMilliseconds 0
     Assert-Startup $true 'current ready snapshot permits shortcut installation'
